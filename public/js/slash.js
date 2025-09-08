@@ -6,20 +6,18 @@ export async function handleSlash(text, { socket, input }) {
   const cmd = (parts.shift() || '').toLowerCase();
   const args = parts;
 
-  if (cmd === 'shrug') {
-    socket.emit('messageRoom', { text: `¯\\_(ツ)_/¯` });
-    return true;
-  }
+  if (cmd === 'shrug') { socket.emit('messageRoom', { text: `¯\\_(ツ)_/¯` }); return true; }
+
   if (cmd === 'roll') {
     const expr = (args[0] || 'd6').toLowerCase();
     const m = expr.match(/^(\d*)d(\d+)([+-]\d+)?$/);
-    if (!m) { alert('Format: /roll NdM+K (contoh /roll 2d6+1)'); return true; }
+    if (!m) { alert('Format: /roll NdM+K'); return true; }
     const n = Math.max(1, parseInt(m[1] || '1', 10));
     const faces = Math.max(2, parseInt(m[2], 10));
     const mod = parseInt(m[3] || '0', 10);
-    let rolls = []; for (let i = 0; i < n; i++) rolls.push(1 + Math.floor(Math.random() * faces));
-    const total = rolls.reduce((a, b) => a + b, 0) + mod;
-    socket.emit('messageRoom', { text: `🎲 ${expr} = [${rolls.join(', ')}] ${mod ? ((mod > 0 ? '+' : '') + mod) : ''} → **${total}**` });
+    let rolls = []; for (let i=0;i<n;i++) rolls.push(1 + Math.floor(Math.random() * faces));
+    const total = rolls.reduce((a,b)=>a+b,0) + mod;
+    socket.emit('messageRoom', { text:`🎲 ${expr} = [${rolls.join(', ')}] ${mod ? ((mod>0?'+':'')+mod) : ''} → **${total}**` });
     return true;
   }
   if (cmd === 'save') {
@@ -52,6 +50,21 @@ export async function handleSlash(text, { socket, input }) {
     const [question, ...opts] = joined.split('|').map(s => s.trim()).filter(Boolean);
     if (!question || opts.length < 2) { alert('Format: /poll Pertanyaan? | opsi1 | opsi2'); return true; }
     socket.emit('createPoll', { question, options: opts }, (res) => { if (!res?.ok) alert(res?.error || 'Gagal membuat poll'); });
+    return true;
+  }
+
+    // server commands passthrough
+  const pass = ['giphy','topic','rules','slow','theme','announce','pin','unpin','ban','unban','kick','mod','unmod','invite','export','tr'];
+  if (pass.includes(cmd)) {
+    socket.emit('slash', { cmd, args }, (res) => {
+      if (!res?.ok) {
+        alert(res?.error || 'Gagal menjalankan perintah.');
+      } else if (res?.url) {
+        window.open(res.url, '_blank');
+      } else if (res?.token && res?.url) {
+        prompt('Invite URL:', location.origin + res.url);
+      }
+    });
     return true;
   }
 

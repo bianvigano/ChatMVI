@@ -1,5 +1,5 @@
-<!doctype html>
-<html lang="id">
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -7,16 +7,105 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="app">
-    <%- include('partials/topbar') %>
-    <%- include('partials/room-meta') %>
-    <%- include('partials/chat-area') %>
-    <%- include('partials/panels') %>
-    <%- include('partials/composer') %>
-    <%- include('partials/login-modal') %>
+  <header class="app-header">
+    <div class="app-brand">
+      <h3>CHK Chat</h3>
+      <div id="roomTopic" class="muted"></div>
+      <div id="roomRules" class="muted small"></div>
+    </div>
+    <div class="app-actions">
+      <input id="searchInput" placeholder="Cari pesan..." />
+      <button id="searchBtn">Cari</button>
+      <span class="muted">Online: <b id="onlineCount">0</b></span>
+      <button id="openLoginBtn" title="Masuk">Masuk</button>
+      <button id="logoutBtn">Logout</button>
+    </div>
+  </header>
+
+  <section class="app-layout">
+    <aside class="sidebar">
+      <h4>Pin</h4>
+      <ul id="pinList" class="pin-list"></ul>
+
+      <h4>Pengumuman</h4>
+      <div id="announcements"></div>
+
+      <h4>Pengguna</h4>
+      <div id="onlineUsers">-</div>
+    </aside>
+
+    <main class="chat-main">
+      <!-- Panel hasil pencarian -->
+      <div id="searchPanel" class="search-panel">
+        <div class="panel-head">
+          <b>Hasil Pencarian</b>
+          <button onclick="document.getElementById('searchPanel').style.display='none'">Tutup</button>
+        </div>
+        <div id="searchResults"></div>
+      </div>
+
+      <!-- Timeline -->
+      <div id="messages" class="messages"></div>
+      <div id="typingIndicator" class="typing small muted"></div>
+
+      <!-- Reply bar (diisi via JS) -->
+      <div id="replyBar" style="display:none"></div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <button id="mdBoldBtn">B</button>
+        <button id="mdItalicBtn"><i>I</i></button>
+        <button id="mdCodeBtn">`</button>
+        <button id="mdBlockBtn">```</button>
+        <button id="mdLinkBtn">Link</button>
+        <button id="previewToggle">Preview</button>
+        <button id="fileBtn">📎</button>
+        <input id="fileInput" type="file" style="display:none" />
+      </div>
+
+      <!-- Preview -->
+      <div id="mdPreview" class="preview" style="display:none"></div>
+
+      <!-- Compose -->
+      <form id="form" class="composer">
+        <input id="input" autocomplete="off" placeholder="Ketik pesan atau /command …" />
+        <button type="submit">Kirim</button>
+      </form>
+    </main>
+  </section>
+
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal">
+    <div class="modal-card">
+      <div class="tabs">
+        <button id="btnTabGlobal" class="tab active">Global</button>
+        <button id="btnTabPrivate" >Private</button>
+        <button id="btnTabPrivate" >Join server</button>
+      </div>
+
+      <div id="globalPanel">
+        <label>Username</label>
+        <input id="usernameGlobalInput" placeholder="nama kamu" />
+        <button id="loginGlobalBtn" class="full">Masuk Global</button>
+      </div>
+
+      <div id="privatePanel" style="display:none;">
+        <label>Username</label>
+        <input id="usernamePrivateInput" placeholder="nama kamu" />
+        <label>Room</label>
+        <input id="roomInput" placeholder="contoh: tim-a" />
+        <label>Password (atau pakai token undangan)</label>
+        <input id="passwordInput" type="password" placeholder="••••••" />
+        <label>Token undangan (opsional)</label>
+        <input id="inviteTokenInput" placeholder="token" />
+        <div class="row">
+          <button id="createPrivateBtn">Buat Room</button>
+          <button id="loginPrivateBtn">Masuk Room</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

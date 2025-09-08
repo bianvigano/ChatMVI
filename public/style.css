@@ -1,437 +1,515 @@
+/* ===================================================
+   CHK — Tema hijau (sesuai screenshot)
+   =================================================== */
 :root {
-  --green: #0f9d58;
-  --light: #f2eaea;
-  --bubble-left: #ffffff;
-  --bubble-right: #d9f6d8;
-  --muted: #9aa3a6;
-  --line: #e3e5e8;
-  --soft: #f2f3f5;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  /* Brand / warna utama */
+  --brand: #16a34a;
+  /* hijau header & tombol */
+  --brand-700: #15803d;
+  --brand-soft: #dcfce7;
+  /* hijau muda untuk bubble sendiri */
+
+  /* Warna dasar UI */
+  --bg: #f3f4f6;
+  /* warna body */
+  --panel: #ffffff;
+  /* panel putih */
+  --chat-bg: #f8eeee;
+  /* latar area pesan (merah muda sangat tipis) */
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 8px 28px rgba(2, 8, 23, .08);
 }
 
-/* ===== Reset dasar ===== */
+/* (Opsional) dark mode, tetap netral */
+:root[data-theme="dark"] {
+  --bg: #0b0f14;
+  --panel: #0f141b;
+  --chat-bg: #151217;
+  --text: #e5e7eb;
+  --muted: #9aa4b2;
+  --border: #273244;
+  --shadow: 0 10px 36px rgba(0, 0, 0, .35);
+}
+
+/* Reset ringkas */
 * {
-  box-sizing: border-box;
+  box-sizing: border-box
 }
 
 html,
 body {
-  height: 100%;
+  height: 100%
+}
+
+body {
   margin: 0;
-  background: var(--light);
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== App layout (flex column) ===== */
-#app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+a {
+  color: inherit;
+  text-decoration: none
 }
 
-/* ===== Topbar ===== */
-.topbar {
-  background: var(--green);
-  color: white;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: space-between;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+button,
+input {
+  font: inherit
+}
+
+/* ===================================================
+   Header hijau
+   =================================================== */
+.app-header {
   position: sticky;
   top: 0;
   z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--brand);
+  color: #fff;
+  border-bottom: 0;
 }
 
-.topbar .title {
-  font-weight: 700;
+.app-brand h3 {
+  margin: 0;
+  font-weight: 700
 }
 
-.topbar .status {
-  opacity: 0.95;
-  font-size: 14px;
+.app-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center
 }
 
-.topbar .actions button {
-  background: rgba(255, 255, 255, 0.12);
-  color: white;
-  border: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
+.app-actions input {
+  height: 34px;
+  min-width: 220px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+}
+
+.app-actions input::placeholder {
+  color: rgba(255, 255, 255, .8)
+}
+
+.app-actions button {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .3);
+  background: transparent;
+  color: #fff;
   cursor: pointer;
 }
 
-/* ===== Area chat fleksibel ===== */
-.chat-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;        /* penting agar anak bisa scroll */
-  overflow: hidden;     /* biar yang scroll #messages */
-  padding: 20px;
+.app-actions button:hover {
+  background: rgba(255, 255, 255, .12)
 }
 
-@media(min-width:700px) {
-  .chat-wrap {
-    padding: 32px;
-  }
+/* ===================================================
+   Layout
+   =================================================== */
+.app-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 14px;
+  padding: 14px;
 }
 
-/* ===== Messages ===== */
+.sidebar h4 {
+  margin: 8px 0 6px
+}
+
+.pin-list {
+  margin: 0;
+  padding-left: 18px
+}
+
+.pin-list li {
+  margin: 4px 0;
+  cursor: pointer;
+  color: #0f172a
+}
+
+#announcements .announce {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+/* ===================================================
+   Timeline / messages
+   =================================================== */
 .messages {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;     /* ini yang bikin scroll di messages */
+  height: 64vh;
+  overflow: auto;
+  padding: 14px;
+  background: var(--chat-bg);
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.date-divider {
+  text-align: center;
+  margin: 12px 0;
+}
+
+.date-divider::before {
+  content: attr(data-label);
 }
 
 .date-divider {
   display: inline-block;
   align-self: center;
-  background: #e6f0f6;
-  padding: 6px 12px;
-  border-radius: 16px;
-  color: #4f6b73;
-  font-size: 13px;
+  background: #e0f2fe;
+  color: #1e3a8a;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
+/* Baris pesan */
 .msg {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
-  align-items: flex-end;
-  max-width: 80%;
-}
-
-.msg.left {
-  align-self: flex-start;
+  margin: 12px 0
 }
 
 .msg.right {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row-reverse
 }
 
 .avatar {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: #cfd8dc;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #37474f;
   font-weight: 700;
-  font-size: 18px;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: #e5e7eb;
+  color: #111;
 }
 
+.msg.right .avatar {
+  background: #cfe8d6;
+  color: #0b5d25
+}
+
+/* Bubble */
 .bubble {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
   padding: 10px 12px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  font-size: 15px;
-  line-height: 1.2;
+  max-width: 640px;
 }
 
-.left .bubble {
-  background: var(--bubble-left);
-  color: #222;
+.msg.right .bubble {
+  background: var(--brand-soft);
+  border-color: #b7e4c7
 }
 
-.right .bubble {
-  background: var(--bubble-right);
-  color: #0a0a0a;
+.msg.left .bubble {
+  background: #fff
 }
 
-.meta {
-  font-size: 12px;
+.msg .meta {
+  font-size: 11px;
   color: var(--muted);
+  margin-top: 4px
+}
+
+/* Kontrol kecil di dalam bubble */
+.msg-controls button {
+  margin-right: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.msg.right .bubble strong {
+  color: var(--brand-700)
+}
+
+.msg.left .bubble strong {
+  color: #7b1fa2
+}
+
+/* Link preview kecil */
+.link-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.link-card img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px
+}
+
+/* Mentions & reply */
+.mention {
+  background: rgba(123, 31, 162, .08);
+  color: #7b1fa2;
+  padding: 0 4px;
+  border-radius: 6px
+}
+
+.mention.me {
+  background: rgba(22, 163, 74, .12);
+  color: var(--brand-700)
+}
+
+.reply-quote {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: #f6f7fb;
+  border-left: 3px solid #c7cde2;
+  border-radius: 8px;
+}
+
+/* ===================================================
+   Toolbar & composer bawah
+   =================================================== */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px
+}
+
+.toolbar button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.preview {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
   margin-top: 6px;
 }
 
-/* ===== Composer (grid): baris1 toolbar, baris2 input | emoji | submit ===== */
 .composer {
   position: sticky;
   bottom: 0;
-  background: #fff;
-  border-top: 1px solid #eee;
-  padding: 12px;
-
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  /* input melar, emoji & submit auto */
-  grid-template-areas:
-    "toolbar toolbar toolbar"
-    "input   emoji   submit";
-  /* gap:8px; */
-  align-items: center;
+  z-index: 5;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  display: flex;
+  gap: 10px;
+  padding: 10px 2px 6px;
 }
 
-/* Toolbar di dalam composer (full width, minimalis) */
-.composer #toolbar {
-  grid-area: toolbar;
-  /* display:flex;  */
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-start;
-  /* ikon di kiri, bisa ubah ke flex-end */
-  background: transparent;
-  border: 0;
-  padding: 0 0 1px 0;
-}
-
-/* Tombol toolbar (ghost button) */
-.composer #toolbar button {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.composer #toolbar button:hover {
-  background: #f2f2f2;
-}
-
-/* Input di area grid */
-#input {
-  grid-area: input;
-  padding: 12px;
-  border-radius: 30px;
-  border: 1px solid #e0e0e0;
-  outline: none;
+.composer input {
+  flex: 1;
+  height: 46px;
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
   background: #fff;
 }
 
-/* Emoji button di area grid (di samping submit) */
-#emojiBtn {
-  grid-area: emoji;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  line-height: 1;
-  font-size: 18px;
-}
-
-#emojiBtn:hover {
-  background: #f2f2f2;
-}
-
-/* Tombol submit */
-form.composer>button[type="submit"] {
-  grid-area: submit;
-  background: var(--green);
-  color: #fff;
-  border: 0;
-  cursor: pointer;
-  height: 40px;
+.composer button {
+  height: 46px;
   padding: 0 16px;
-  border-radius: 20px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand-700);
 }
 
-form.composer>button[type="submit"]:disabled {
-  opacity: .6;
-  cursor: not-allowed;
+.composer button:hover {
+  filter: brightness(.98)
 }
 
-/* ===== Modal login ===== */
+/* tombol emoji (kalau ada) */
+#fileBtn {
+  background: #fff;
+  border: 1px solid var(--border)
+}
+
+/* Typing indicator */
+.typing {
+  height: 18px;
+  margin-top: 4px;
+  color: var(--muted)
+}
+
+/* ===================================================
+   Search panel
+   =================================================== */
+.search-panel {
+  display: none;
+  position: fixed;
+  right: 16px;
+  top: 78px;
+  width: 360px;
+  max-height: 62vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  z-index: 30;
+}
+
+.search-panel .panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px
+}
+
+.search-panel .result {
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer
+}
+
+.search-panel .result:hover {
+  background: #f3f4f6
+}
+
+/* ===================================================
+   Modal (Login) — putih di tengah
+   =================================================== */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
   display: none;
   align-items: center;
   justify-content: center;
-  /* default hidden (anti flicker) */
+  background: rgba(0, 0, 0, .55);
+  z-index: 60;
 }
 
 .modal-card {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 360px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  width: 480px;
+  max-width: 92vw;
+  background: #fff;
+  color: #0f172a;
+  border: 0;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
 }
 
-.modal-card h2 {
-  margin: 0 0 12px;
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px
+}
+
+.tabs button {
+  flex: 1;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f6f7fb
+}
+
+.tabs button.active {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand-700)
 }
 
 .modal-card input {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  margin-bottom: 10px;
-}
-
-.modal-card button {
-  width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  background: var(--green);
-  color: white;
-  border: 0;
-  cursor: pointer;
-}
-
-/* ===== Tabs ===== */
-.tab {
-  padding: 8px 12px;
-  border: 1px solid #2a3a4d;
-  background: #0f1520;
-  color: #e8eef5;
+  height: 40px;
+  padding: 10px 12px;
+  margin: 6px 0 10px;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  cursor: pointer;
 }
 
-.tab.active {
-  font-weight: 700;
-  border-color: #4da3ff;
-  box-shadow: 0 0 0 2px rgba(77, 163, 255, .15) inset;
-}
-
-.tab+.tab {
-  margin-left: 8px;
-}
-
-/* ===== Mentions, link-card ===== */
-.mention {
-  background: #fff0c2;
-  padding: 0 3px;
-  border-radius: 3px;
-}
-
-.mention.me {
-  background: #c8f7c5;
-}
-
-.link-card:hover {
-  background: #fafafa;
-}
-
-/* ===== Controls kecil di bubble ===== */
-.msg-controls button {
-  font-size: 12px;
-  margin-right: 6px;
-}
-
-/* ===== Popover panel (emoji/gif/sticker) ===== */
-.panel.popover {
-  position: relative;
-  margin: 8px 12px;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
-}
-
-.panel.popover input {
+.modal-card .full {
   width: 100%;
-  padding: 6px 8px;
-  margin-bottom: 8px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-}
-
-.panel .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-  gap: 6px;
-}
-
-.panel .grid .cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  border: 1px solid #eee;
-  border-radius: 6px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.panel .grid .cell:hover {
-  background: #f6f6f6;
-}
-
-/* ===== Markdown preview ===== */
-.md-preview {
-  margin: 8px 12px;
-  padding: 10px;
-  border-left: 3px solid #7b1fa2;
-  background: #f8f7ff;
-  border-radius: 6px;
-}
-
-.md-preview h1,
-.md-preview h2,
-.md-preview h3 {
-  margin: 8px 0 4px;
-}
-
-.md-preview pre {
-  background: #282c34;
+  height: 40px;
+  background: var(--brand);
   color: #fff;
-  padding: 8px;
-  border-radius: 6px;
-  overflow: auto;
+  border: 1px solid var(--brand-700);
+  border-radius: 10px
 }
 
-.md-preview code {
-  background: #f2f2f2;
-  padding: 1px 4px;
-  border-radius: 4px;
-}
-
-/* ===== Emoji suggest dropdown ===== */
-.emoji-suggest {
-  position: absolute;
-  z-index: 9999;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
-  padding: 6px;
-  max-height: 220px;
-  overflow: auto;
-  width: 220px;
-}
-
-.emoji-suggest .item {
-  padding: 6px;
-  border-radius: 4px;
+.row {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+  gap: 10px
 }
 
-.emoji-suggest .item.active,
-.emoji-suggest .item:hover {
-  background: #f3f3f3;
+/* ===================================================
+   Utilities
+   =================================================== */
+.offline {
+  filter: grayscale(1)
 }
 
-.emoji-suggest .short {
-  opacity: .7;
-  font-size: 12px;
+/* scrollbar halus untuk area pesan */
+.messages::-webkit-scrollbar {
+  width: 10px
 }
 
-/* ===== Typing indicator (opsional) ===== */
-.typing {
-  padding: 6px 12px;
-  font-size: 12px;
-  opacity: .85;
-  color: #444;
+.messages::-webkit-scrollbar-track {
+  background: transparent
+}
+
+.messages::-webkit-scrollbar-thumb {
+  background: #dadde4;
+  border-radius: 999px
+}
+
+/* ===================================================
+   Responsive
+   =================================================== */
+@media (max-width: 960px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
+  .messages {
+    height: 58vh;
+  }
+
+  .app-actions input {
+    min-width: 160px;
+  }
 }
