@@ -1,0 +1,437 @@
+:root {
+  --green: #0f9d58;
+  --light: #f2eaea;
+  --bubble-left: #ffffff;
+  --bubble-right: #d9f6d8;
+  --muted: #9aa3a6;
+  --line: #e3e5e8;
+  --soft: #f2f3f5;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+/* ===== Reset dasar ===== */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--light);
+}
+
+/* ===== App layout (flex column) ===== */
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== Topbar ===== */
+.topbar {
+  background: var(--green);
+  color: white;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar .title {
+  font-weight: 700;
+}
+
+.topbar .status {
+  opacity: 0.95;
+  font-size: 14px;
+}
+
+.topbar .actions button {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* ===== Area chat fleksibel ===== */
+.chat-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;        /* penting agar anak bisa scroll */
+  overflow: hidden;     /* biar yang scroll #messages */
+  padding: 20px;
+}
+
+@media(min-width:700px) {
+  .chat-wrap {
+    padding: 32px;
+  }
+}
+
+/* ===== Messages ===== */
+.messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;     /* ini yang bikin scroll di messages */
+}
+
+.date-divider {
+  display: inline-block;
+  align-self: center;
+  background: #e6f0f6;
+  padding: 6px 12px;
+  border-radius: 16px;
+  color: #4f6b73;
+  font-size: 13px;
+}
+
+.msg {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  max-width: 80%;
+}
+
+.msg.left {
+  align-self: flex-start;
+}
+
+.msg.right {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #cfd8dc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #37474f;
+  font-weight: 700;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.bubble {
+  padding: 10px 12px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.left .bubble {
+  background: var(--bubble-left);
+  color: #222;
+}
+
+.right .bubble {
+  background: var(--bubble-right);
+  color: #0a0a0a;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ===== Composer (grid): baris1 toolbar, baris2 input | emoji | submit ===== */
+.composer {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #eee;
+  padding: 12px;
+
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  /* input melar, emoji & submit auto */
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "input   emoji   submit";
+  /* gap:8px; */
+  align-items: center;
+}
+
+/* Toolbar di dalam composer (full width, minimalis) */
+.composer #toolbar {
+  grid-area: toolbar;
+  /* display:flex;  */
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  /* ikon di kiri, bisa ubah ke flex-end */
+  background: transparent;
+  border: 0;
+  padding: 0 0 1px 0;
+}
+
+/* Tombol toolbar (ghost button) */
+.composer #toolbar button {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.composer #toolbar button:hover {
+  background: #f2f2f2;
+}
+
+/* Input di area grid */
+#input {
+  grid-area: input;
+  padding: 12px;
+  border-radius: 30px;
+  border: 1px solid #e0e0e0;
+  outline: none;
+  background: #fff;
+}
+
+/* Emoji button di area grid (di samping submit) */
+#emojiBtn {
+  grid-area: emoji;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 18px;
+}
+
+#emojiBtn:hover {
+  background: #f2f2f2;
+}
+
+/* Tombol submit */
+form.composer>button[type="submit"] {
+  grid-area: submit;
+  background: var(--green);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+}
+
+form.composer>button[type="submit"]:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* ===== Modal login ===== */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  /* default hidden (anti flicker) */
+}
+
+.modal-card {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 360px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-card h2 {
+  margin: 0 0 12px;
+}
+
+.modal-card input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  margin-bottom: 10px;
+}
+
+.modal-card button {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--green);
+  color: white;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ===== Tabs ===== */
+.tab {
+  padding: 8px 12px;
+  border: 1px solid #2a3a4d;
+  background: #0f1520;
+  color: #e8eef5;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.tab.active {
+  font-weight: 700;
+  border-color: #4da3ff;
+  box-shadow: 0 0 0 2px rgba(77, 163, 255, .15) inset;
+}
+
+.tab+.tab {
+  margin-left: 8px;
+}
+
+/* ===== Mentions, link-card ===== */
+.mention {
+  background: #fff0c2;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+.mention.me {
+  background: #c8f7c5;
+}
+
+.link-card:hover {
+  background: #fafafa;
+}
+
+/* ===== Controls kecil di bubble ===== */
+.msg-controls button {
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+/* ===== Popover panel (emoji/gif/sticker) ===== */
+.panel.popover {
+  position: relative;
+  margin: 8px 12px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+}
+
+.panel.popover input {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.panel .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 6px;
+}
+
+.panel .grid .cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel .grid .cell:hover {
+  background: #f6f6f6;
+}
+
+/* ===== Markdown preview ===== */
+.md-preview {
+  margin: 8px 12px;
+  padding: 10px;
+  border-left: 3px solid #7b1fa2;
+  background: #f8f7ff;
+  border-radius: 6px;
+}
+
+.md-preview h1,
+.md-preview h2,
+.md-preview h3 {
+  margin: 8px 0 4px;
+}
+
+.md-preview pre {
+  background: #282c34;
+  color: #fff;
+  padding: 8px;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.md-preview code {
+  background: #f2f2f2;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* ===== Emoji suggest dropdown ===== */
+.emoji-suggest {
+  position: absolute;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  padding: 6px;
+  max-height: 220px;
+  overflow: auto;
+  width: 220px;
+}
+
+.emoji-suggest .item {
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.emoji-suggest .item.active,
+.emoji-suggest .item:hover {
+  background: #f3f3f3;
+}
+
+.emoji-suggest .short {
+  opacity: .7;
+  font-size: 12px;
+}
+
+/* ===== Typing indicator (opsional) ===== */
+.typing {
+  padding: 6px 12px;
+  font-size: 12px;
+  opacity: .85;
+  color: #444;
+}

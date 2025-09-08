@@ -1,0 +1,40 @@
+<div id="loginModal" class="modal">
+  <div class="modal-card">
+    <h2>Pilih Mode Chat</h2>
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button id="btnTabGlobal" class="tab active" type="button">Global</button>
+      <button id="btnTabPrivate" class="tab" type="button">Privat</button>
+    </div>
+
+    <div id="globalPanel">
+      <label for="usernameGlobalInput" style="font-size:12px;opacity:.8">Username</label>
+      <input id="usernameGlobalInput" placeholder="Masukkan username..." />
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button id="loginGlobalBtn" type="button">Masuk Global</button>
+      </div>
+      <small style="display:block;margin-top:8px;opacity:.7">
+        Global = ruang umum bersama semua orang.
+      </small>
+    </div>
+
+    <div id="privatePanel" style="display:none">
+      <label for="usernamePrivateInput" style="font-size:12px;opacity:.8;display:block;margin-top:8px;">Username</label>
+      <input id="usernamePrivateInput" placeholder="Masukkan username..." />
+
+      <label for="roomInput" style="font-size:12px;opacity:.8;display:block;margin-top:8px;">Kode Room</label>
+      <input id="roomInput" placeholder="Kode room (mis. teman-aku)" />
+
+      <label for="passwordInput" style="font-size:12px;opacity:.8;display:block;margin-top:8px;">Password Room</label>
+      <input id="passwordInput" type="password" placeholder="Password room" />
+
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button id="createPrivateBtn" type="button">Buat Room</button>
+        <button id="loginPrivateBtn" type="button">Masuk Privat</button>
+      </div>
+
+      <small style="display:block;margin-top:8px;opacity:.7">
+        Belum ada room? Isi kode & password, lalu klik <b>Buat Room</b>.
+      </small>
+    </div>
+  </div>
+</div>

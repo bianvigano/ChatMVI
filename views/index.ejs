@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title><%= typeof title !== 'undefined' ? title : 'Chat MVI' %></title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <%- include('partials/topbar') %>
+    <%- include('partials/room-meta') %>
+    <%- include('partials/chat-area') %>
+    <%- include('partials/panels') %>
+    <%- include('partials/composer') %>
+    <%- include('partials/login-modal') %>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
