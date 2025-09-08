@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 
 const ParentSchema = new mongoose.Schema(
   {
-    _id: String,   // id pesan induk (stringified ObjectId)
+    _id: String,
     id: String,
     username: String,
     text: String,
@@ -24,10 +24,7 @@ const LinkPreviewSchema = new mongoose.Schema(
 );
 
 const PollOptionSchema = new mongoose.Schema(
-  {
-    text: String,
-    votes: [String], // daftar username
-  },
+  { text: String, votes: [String] },
   { _id: false }
 );
 
@@ -46,28 +43,22 @@ const MessageSchema = new mongoose.Schema(
     username: { type: String, required: true },
     type: { type: String, enum: ['text', 'image', 'poll'], default: 'text' },
 
-    // text message
     text: String,
     editedAt: Date,
 
-    // image message
     imageUrl: String,
 
-    // reply
     parent: ParentSchema,
-
-    // link preview
     linkPreview: LinkPreviewSchema,
 
-    // poll
     poll: PollSchema,
   },
-  {
-    timestamps: { createdAt: 'createdAt', updatedAt: false },
-  }
+  { timestamps: { createdAt: 'createdAt', updatedAt: false } }
 );
 
-// untuk query timeline cepat
-MessageSchema.index({ roomId: 1, createdAt: -1 });
+// INDEXES untuk performa timeline & filter
+MessageSchema.index({ roomId: 1, createdAt: -1, _id: -1 }); // utama (cursor)
+MessageSchema.index({ roomId: 1, type: 1, createdAt: -1 }); // jika sering filter type
+MessageSchema.index({ roomId: 1, username: 1, createdAt: -1 }); // riwayat per-user
 
 module.exports = mongoose.model('Message', MessageSchema);

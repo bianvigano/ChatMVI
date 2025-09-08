@@ -5,6 +5,8 @@ import { createTyping } from './typing.js';
 import { handleSlash } from './slash.js';
 import { renderMessages, appendMessage, ensureDateDivider, createMsgNode, renderLinkPreview } from './messages.js';
 
+let nextCursor = null; // cursor untuk batch older berikutnya
+
 function insertAtCursor(el, before, after = '') {
   if (!el) return;
   el.focus();
@@ -58,6 +60,7 @@ function resetMessagesUI() {
   if (messagesEl) messagesEl.innerHTML = '';
   state.lastDateKey = null; state.messagesData = []; state.oldestAt = null;
   window.dispatchEvent(new CustomEvent('app:set-reply', { detail: null }));
+  nextCursor = null;
 }
 
 function setupReplyBar() {
@@ -284,33 +287,46 @@ function setupSuggest(input) {
 
 function addPagination(socket) {
   const scrollerEl = document.getElementById('messages');
-  scrollerEl?.addEventListener('scroll', async () => {
+
+  async function loadOlderByCursor() {
     if (!state.roomId) return;
-    if (scrollerEl.scrollTop <= 0 && !scrollerEl.__isLoadingOlder && state.oldestAt) {
-      scrollerEl.__isLoadingOlder = true;
-      try {
-        const params = new URLSearchParams({ room: state.roomId, before: new Date(state.oldestAt).toISOString(), limit: '50' });
-        const r = await fetch(`/messages?${params.toString()}`); const older = await r.json();
-        if (Array.isArray(older) && older.length) {
-          const prevHeight = scrollerEl.scrollHeight;
-          const frag = document.createDocumentFragment();
-          const messagesEl = document.getElementById('messages');
-          older.forEach((m) => {
-            ensureDateDivider(messagesEl, m.createdAt);
-            frag.appendChild(createMsgNode(socket, m, {
-              username: state.username,
-              onEdit: (id)=>doEditMessage(socket, id),
-              onDelete: (id)=>doDeleteMessage(socket, id),
-              scrollToMessage,
-            }));
-          });
-          messagesEl.insertBefore(frag, messagesEl.firstChild);
-          state.messagesData = older.concat(state.messagesData);
-          if (!state.oldestAt || new Date(older[0].createdAt) < new Date(state.oldestAt)) state.oldestAt = older[0].createdAt;
-          const added = scrollerEl.scrollHeight - prevHeight;
-          scrollerEl.scrollTop = added;
-        }
-      } finally { scrollerEl.__isLoadingOlder = false; }
+    const params = new URLSearchParams({ room: state.roomId, limit: '50' });
+    if (nextCursor) params.set('cursor', nextCursor);
+
+    const r = await fetch(`/messages?${params.toString()}`);
+    const data = await r.json();
+    const items = Array.isArray(data) ? data : (data.items || []);
+    const nxt = Array.isArray(data) ? null : data.nextCursor;
+
+    if (Array.isArray(items) && items.length) {
+      const prevHeight = scrollerEl.scrollHeight;
+      const frag = document.createDocumentFragment();
+      const messagesEl = document.getElementById('messages');
+      items.forEach((m) => {
+        ensureDateDivider(messagesEl, m.createdAt);
+        frag.appendChild(createMsgNode(socket, m, {
+          username: state.username,
+          onEdit: (id)=>doEditMessage(socket, id),
+          onDelete: (id)=>doDeleteMessage(socket, id),
+          scrollToMessage,
+        }));
+      });
+      messagesEl.insertBefore(frag, messagesEl.firstChild);
+      state.messagesData = items.concat(state.messagesData);
+      nextCursor = nxt || null;
+
+      const added = scrollerEl.scrollHeight - prevHeight;
+      scrollerEl.scrollTop = added;
+    } else {
+      nextCursor = null; // tidak ada older lagi
+    }
+  }
+
+  let isLoadingOlder = false;
+  scrollerEl?.addEventListener('scroll', async () => {
+    if (scrollerEl.scrollTop <= 0 && !isLoadingOlder) {
+      isLoadingOlder = true;
+      try { await loadOlderByCursor(); } finally { isLoadingOlder = false; }
     }
   });
 }
@@ -342,7 +358,8 @@ function setupLogin(socket) {
   document.getElementById('loginGlobalBtn')?.addEventListener('click', () => {
     const u = (document.getElementById('usernameGlobalInput')?.value || '').trim(); if (!u) return alert('Masukkan username');
     state.username = u; state.roomId = 'global'; localStorage.setItem('chat_username', state.username); localStorage.setItem('chat_room', state.roomId);
-    if (!socket.connected) socket.connect(); resetMessagesUI(); socket.emit('joinGlobal', { username: state.username }); hideLogin();
+    if (!socket.connected) socket.connect(); resetMessagesUI(); socket.emit('joinGlobal', { username: state.username });
+    hideLogin();
   });
   document.getElementById('createPrivateBtn')?.addEventListener('click', () => {
     const u = (document.getElementById('usernamePrivateInput')?.value || '').trim();
@@ -367,6 +384,7 @@ function setupLogin(socket) {
     });
   });
 
+  // Auto join
   if (!state.username || !state.roomId) { setMode('global'); showLogin(); }
   else if (state.roomId === 'global') { if (!socket.connected) socket.connect(); resetMessagesUI(); socket.emit('joinGlobal', { username: state.username }); hideLogin(); }
   else {
@@ -396,11 +414,7 @@ function setupForm(socket) {
     const payload = { text };
     if (state.replyTo && (state.replyTo._id || state.replyTo.id)) payload.parentId = state.replyTo._id || state.replyTo.id;
 
-    socket.emit('messageRoom', payload, (res) => {
-      if (res && res.ok === false && res.error === 'SLOW_MODE') {
-        // optional toast
-      }
-    });
+    socket.emit('messageRoom', payload, (res) => { if (res && res.ok === false && res.error === 'SLOW_MODE') { /* optional toast */ } });
     input.value = '';
     const mdPreview = document.getElementById('mdPreview'); if (mdPreview && state.previewOn) mdPreview.innerHTML = '';
     socket.__typing.stop(true);
@@ -417,7 +431,13 @@ function setupSocket() {
 
   const messagesEl = document.getElementById('messages');
 
-  socket.on('history', (messages) => renderMessages(messagesEl, socket, messages || [], state.username, scrollToMessage, { scroll: true }));
+  socket.on('history', (payload) => {
+    // dukung payload lama (array) & baru ({items,nextCursor})
+    const items = Array.isArray(payload) ? payload : (payload.items || []);
+    nextCursor = Array.isArray(payload) ? null : (payload.nextCursor || null);
+    renderMessages(messagesEl, socket, items, state.username, scrollToMessage, { scroll: true });
+  });
+
   socket.on('message', (m) => { if (m.roomId !== state.roomId) return; appendMessage(messagesEl, socket, m, state.username, scrollToMessage); typing.markUserStopped(m.username, state.username); });
 
   socket.on('messageEdited', ({ id, newText, editedAt, linkPreview }) => {

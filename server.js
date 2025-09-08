@@ -1,4 +1,4 @@
-// server.js (Mongo/Mongoose version)
+// server.js (EJS + Socket.IO + Mongo + bcrypt + cursor pagination)
 require('dotenv').config();
 const path = require('path');
 const http = require('http');
@@ -6,6 +6,8 @@ const express = require('express');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const compression = require('compression');
+const bcrypt = require('bcryptjs');
+
 const { connectMongo } = require('./db');
 const Room = require('./models/Room');
 const Message = require('./models/Message');
@@ -17,7 +19,7 @@ const app = express();
 const server = http.createServer(app);
 const io = require('socket.io')(server, { cors: { origin: false } });
 
-// ===== Middlewares & static =====
+// ===== App setup =====
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(helmet());
@@ -29,42 +31,37 @@ app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
 }));
 
-// ===== In-memory presence (untuk online count, slow mode timer) =====
-// Data chat tetap disimpan di Mongo; presence & throttle tersimpan di memori.
+// ===== Presence in-memory =====
 const presences = new Map();
-// format: presences.get(roomId) = { users: Map(socketId->username), nameToSockets: Map(username->Set(socketId)), lastMsgAtByUser: Map(username->timestamp) }
-
 function ensurePresence(roomId) {
   if (!presences.has(roomId)) {
     presences.set(roomId, {
-      users: new Map(),
-      nameToSockets: new Map(),
-      lastMsgAtByUser: new Map(),
+      users: new Map(),           // socketId -> username
+      nameToSockets: new Map(),   // username -> Set<socketId>
+      lastMsgAtByUser: new Map(), // username -> timestamp (slow mode)
     });
   }
   return presences.get(roomId);
 }
-
 function broadcastPresence(roomId) {
   const p = presences.get(roomId);
   if (!p) return;
-  const onlineCount = p.users.size;
-  const onlineUsers = Array.from(new Set(p.users.values()));
-  io.to(roomId).emit('onlineCount', { roomId, n: onlineCount });
-  io.to(roomId).emit('onlineUsers', { roomId, users: onlineUsers });
+  io.to(roomId).emit('onlineCount', { roomId, n: p.users.size });
+  io.to(roomId).emit('onlineUsers', { roomId, users: Array.from(new Set(p.users.values())) });
 }
 
-async function ensureRoomDoc(roomId, password = null) {
+// ===== Ensure room doc =====
+async function ensureRoomDoc(roomId) {
   let r = await Room.findOne({ roomId }).lean();
   if (!r) {
-    r = await Room.create({ roomId, password, topic: '', rules: '', slowModeSec: 0 });
+    r = await Room.create({ roomId, topic: '', rules: '', slowModeSec: 0 });
     r = r.toObject();
   }
   return r;
 }
 
+// ===== Link preview helper =====
 const MENTION_RE = /(^|\s)@([A-Za-z0-9_]+)\b/g;
-
 async function buildLinkPreview(text) {
   try {
     const m = String(text || '').match(/https?:\/\/[^\s)]+/);
@@ -78,26 +75,54 @@ async function buildLinkPreview(text) {
   } catch { return null; }
 }
 
+// ===== Cursor helpers =====
+const { Types: { ObjectId } } = require('mongoose');
+
+function packCursor(doc) {
+  if (!doc) return null;
+  const iso = new Date(doc.createdAt).toISOString();
+  const id = String(doc._id);
+  return Buffer.from(`${iso}|${id}`).toString('base64');
+}
+function unpackCursor(c) {
+  if (!c) return null;
+  try {
+    const [iso, id] = Buffer.from(String(c), 'base64').toString('utf8').split('|');
+    return { t: new Date(iso), id: new ObjectId(id) };
+  } catch { return null; }
+}
+
 // ===== Routes =====
 app.get('/', (req, res) => res.render('index', { title: 'Chat MVI' }));
 
-// Timeline paginasi via DB
+// Cursor pagination API: return { items, nextCursor }
 app.get('/messages', async (req, res) => {
   try {
     const roomId = String(req.query.room || 'global');
-    const before = req.query.before ? new Date(req.query.before) : null;
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '50', 10)));
+    const cursor = unpackCursor(req.query.cursor);
+    const before = req.query.before ? new Date(req.query.before) : null;
 
     const q = { roomId };
-    if (before) q.createdAt = { $lt: before };
+    if (cursor) {
+      q.$or = [
+        { createdAt: { $lt: cursor.t } },
+        { createdAt: cursor.t, _id: { $lt: cursor.id } },
+      ];
+    } else if (before) {
+      q.createdAt = { $lt: before };
+    }
 
-    // ambil newest dulu, batasi, lalu urutkan ke ascending supaya tampil rapi
-    const newestFirst = await Message.find(q).sort({ createdAt: -1 }).limit(limit).lean();
-    const list = newestFirst.reverse();
+    const newestFirst = await Message.find(q)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
 
-    res.json(list);
+    const items = newestFirst.reverse();
+    const nextCursor = items.length ? packCursor(items[0]) : null;
+    res.json({ items, nextCursor });
   } catch (e) {
-    res.json([]);
+    res.json({ items: [], nextCursor: null });
   }
 });
 
@@ -118,9 +143,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    // pastikan dokumen room
-    const roomDoc = await ensureRoomDoc(roomId, null);
-
+    await ensureRoomDoc(roomId);
     current = { roomId, username };
     const p = ensurePresence(roomId);
     p.users.set(socket.id, username);
@@ -128,25 +151,36 @@ io.on('connection', (socket) => {
     p.nameToSockets.get(username).add(socket.id);
     socket.join(roomId);
 
-    // kirim history terakhir 50 (ascending)
-    const newestFirst = await Message.find({ roomId }).sort({ createdAt: -1 }).limit(50).lean();
-    socket.emit('history', newestFirst.reverse());
-    socket.emit('roomInfo', { topic: roomDoc.topic || '', rules: roomDoc.rules || '', slowModeSec: roomDoc.slowModeSec || 0 });
+    // kirim history awal + nextCursor untuk load yang lebih lama
+    const newestFirst = await Message.find({ roomId }).sort({ createdAt: -1, _id: -1 }).limit(50).lean();
+    const items = newestFirst.reverse();
+    const nextCursor = items.length ? packCursor(items[0]) : null;
+
+    // kirim info room
+    const r = await Room.findOne({ roomId }, { topic: 1, rules: 1, slowModeSec: 1 }).lean();
+
+    socket.emit('history', { items, nextCursor });
+    socket.emit('roomInfo', { topic: r?.topic || '', rules: r?.rules || '', slowModeSec: r?.slowModeSec || 0 });
     broadcastPresence(roomId);
   }
 
   socket.on('joinGlobal', async ({ username }) => {
     if (!username) return;
-    await ensureRoomDoc('global', null);
+    await ensureRoomDoc('global');
     joinRoom('global', username);
   });
 
+  // CREATE ROOM: simpan password dalam hash
   socket.on('createRoom', async ({ roomId, password, username }, cb) => {
     try {
       if (!roomId || !password || !username) return cb?.({ ok: false, error: 'INVALID' });
       const exists = await Room.findOne({ roomId }).lean();
       if (exists) return cb?.({ ok: false, error: 'Room sudah ada' });
-      await Room.create({ roomId, password, topic: '', rules: '' });
+
+      const rounds = Math.max(4, parseInt(process.env.BCRYPT_ROUNDS || '10', 10) || 10);
+      const passwordHash = await bcrypt.hash(String(password), rounds);
+
+      await Room.create({ roomId, passwordHash, topic: '', rules: '' });
       await joinRoom(roomId, username);
       cb?.({ ok: true });
     } catch (e) {
@@ -154,12 +188,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  // JOIN ROOM: verifikasi hash; fallback legacy plaintext + auto-migrate ke hash
   socket.on('joinRoom', async ({ roomId, password, username }, cb) => {
     try {
-      const r = await Room.findOne({ roomId }).lean();
+      const r = await Room.findOne({ roomId }).select('+password +passwordHash').lean();
       if (!r) return cb?.({ ok: false, error: 'Room tidak ada' });
-      if (!password || r.password !== password) return cb?.({ ok: false, error: 'Password salah' });
       if (!username) return cb?.({ ok: false, error: 'Username wajib' });
+      const pass = String(password || '');
+
+      let ok = false;
+      if (r.passwordHash) {
+        ok = await bcrypt.compare(pass, r.passwordHash);
+      } else if (r.password) {
+        // legacy plaintext
+        ok = pass === r.password;
+        if (ok) {
+          // auto-migrate ke hash, lalu hapus plaintext
+          const rounds = Math.max(4, parseInt(process.env.BCRYPT_ROUNDS || '10', 10) || 10);
+          const passwordHash = await bcrypt.hash(pass, rounds);
+          await Room.updateOne({ roomId }, { $set: { passwordHash }, $unset: { password: 1 } });
+        }
+      }
+
+      if (!ok) return cb?.({ ok: false, error: 'Password salah' });
+
       await joinRoom(roomId, username);
       cb?.({ ok: true });
     } catch (e) {
@@ -187,8 +239,8 @@ io.on('connection', (socket) => {
 
   async function slowModeCheck(roomId, username) {
     const p = ensurePresence(roomId);
-    const roomDoc = await Room.findOne({ roomId }, { slowModeSec: 1 }).lean();
-    const sec = roomDoc?.slowModeSec || 0;
+    const secDoc = await Room.findOne({ roomId }, { slowModeSec: 1 }).lean();
+    const sec = secDoc?.slowModeSec || 0;
     if (sec <= 0) return { ok: true };
     const last = p.lastMsgAtByUser.get(username);
     const now = Date.now();
@@ -215,22 +267,15 @@ io.on('connection', (socket) => {
         }
       }
 
-      // image message
       if (payload.imageUrl) {
-        const msgDoc = await Message.create({
-          roomId, username, type: 'image', imageUrl: String(payload.imageUrl),
-          parent,
-        });
+        const msgDoc = await Message.create({ roomId, username, type: 'image', imageUrl: String(payload.imageUrl), parent });
         io.to(roomId).emit('message', msgDoc.toObject());
         return cb?.({ ok: true });
       }
 
-      // text message
       const text = String(payload.text || '').slice(0, 4000);
       const linkPreview = await buildLinkPreview(text);
-      const msgDoc = await Message.create({
-        roomId, username, type: 'text', text, parent, linkPreview,
-      });
+      const msgDoc = await Message.create({ roomId, username, type: 'text', text, parent, linkPreview });
       const msg = msgDoc.toObject();
       io.to(roomId).emit('message', msg);
 
@@ -268,9 +313,7 @@ io.on('connection', (socket) => {
 
       io.to(roomId).emit('messageEdited', { id: String(m._id), newText: m.text, editedAt: m.editedAt, linkPreview: m.linkPreview });
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('deleteMessage', async ({ id }, cb) => {
@@ -283,9 +326,7 @@ io.on('connection', (socket) => {
       await Message.deleteOne({ _id: id });
       io.to(roomId).emit('messageDeleted', { id: String(id) });
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('createPoll', async ({ question, options }, cb) => {
@@ -300,14 +341,10 @@ io.on('connection', (socket) => {
       };
       if (poll.options.length < 2) return cb?.({ ok: false, error: 'MIN_OPTIONS' });
 
-      const msgDoc = await Message.create({
-        roomId, username, type: 'poll', poll,
-      });
+      const msgDoc = await Message.create({ roomId, username, type: 'poll', poll });
       io.to(roomId).emit('message', msgDoc.toObject());
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('votePoll', async ({ id, optionIndex }, cb) => {
@@ -320,18 +357,14 @@ io.on('connection', (socket) => {
       const opt = m.poll?.options?.[i];
       if (!opt) return cb?.({ ok: false, error: 'BAD_INDEX' });
 
-      // hapus vote lama user
       m.poll.options.forEach(o => { o.votes = o.votes.filter(u => u !== username); });
-      // tambahkan vote baru
       opt.votes.push(username);
 
       m.markModified('poll');
       await m.save();
       io.to(roomId).emit('pollUpdated', { id: String(m._id), poll: m.poll });
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('closePoll', async ({ id }, cb) => {
@@ -344,9 +377,7 @@ io.on('connection', (socket) => {
       await m.save();
       io.to(roomId).emit('pollUpdated', { id: String(m._id), poll: m.poll });
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('slash', async ({ cmd, args }, cb) => {
@@ -374,29 +405,33 @@ io.on('connection', (socket) => {
 
       if (c === 'topic') {
         const topic = String((args || []).join(' ')).slice(0, 500);
-        const r = await Room.findOneAndUpdate({ roomId }, { $set: { topic } }, { new: true, upsert: true, projection: { topic: 1, rules: 1, slowModeSec: 1 } });
-        io.to(roomId).emit('roomInfo', { topic: r.topic || '', rules: r.rules || '', slowModeSec: r.slowModeSec || 0 });
+        const r = await Room.findOneAndUpdate(
+          { roomId }, { $set: { topic } }, { new: true, upsert: true, projection: { topic: 1, rules: 1, slowModeSec: 1 } }
+        );
+        io.to(roomId).emit('roomInfo', { topic: r?.topic || '', rules: r?.rules || '', slowModeSec: r?.slowModeSec || 0 });
         return cb?.({ ok: true });
       }
 
       if (c === 'rules') {
         const rules = String((args || []).join(' ')).slice(0, 1000);
-        const r = await Room.findOneAndUpdate({ roomId }, { $set: { rules } }, { new: true, upsert: true, projection: { topic: 1, rules: 1, slowModeSec: 1 } });
-        io.to(roomId).emit('roomInfo', { topic: r.topic || '', rules: r.rules || '', slowModeSec: r.slowModeSec || 0 });
+        const r = await Room.findOneAndUpdate(
+          { roomId }, { $set: { rules } }, { new: true, upsert: true, projection: { topic: 1, rules: 1, slowModeSec: 1 } }
+        );
+        io.to(roomId).emit('roomInfo', { topic: r?.topic || '', rules: r?.rules || '', slowModeSec: r?.slowModeSec || 0 });
         return cb?.({ ok: true });
       }
 
       if (c === 'slow') {
         const sec = Math.max(0, parseInt(args?.[0] || '0', 10) || 0);
-        const r = await Room.findOneAndUpdate({ roomId }, { $set: { slowModeSec: sec } }, { new: true, upsert: true, projection: { slowModeSec: 1 } });
-        io.to(roomId).emit('slowMode', { seconds: r.slowModeSec || 0, waitMs: (r.slowModeSec || 0) * 1000 });
+        const r = await Room.findOneAndUpdate(
+          { roomId }, { $set: { slowModeSec: sec } }, { new: true, upsert: true, projection: { slowModeSec: 1 } }
+        );
+        io.to(roomId).emit('slowMode', { seconds: r?.slowModeSec || 0, waitMs: (r?.slowModeSec || 0) * 1000 });
         return cb?.({ ok: true });
       }
 
       return cb?.({ ok: false, error: 'UNKNOWN' });
-    } catch (e) {
-      cb?.({ ok: false, error: 'ERR' });
-    }
+    } catch (e) { cb?.({ ok: false, error: 'ERR' }); }
   });
 
   socket.on('sendImage', async ({ imageUrl }, cb) => {
@@ -406,9 +441,7 @@ io.on('connection', (socket) => {
       const msgDoc = await Message.create({ roomId, username, type: 'image', imageUrl: String(imageUrl) });
       io.to(roomId).emit('message', msgDoc.toObject());
       cb?.({ ok: true });
-    } catch (e) {
-      cb?.({ ok: false });
-    }
+    } catch (e) { cb?.({ ok: false }); }
   });
 
   socket.on('disconnect', () => {
@@ -423,12 +456,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// ===== Start server after Mongo connected =====
+// ===== Start after Mongo connected =====
 const PORT = process.env.PORT || 3000;
 connectMongo().then(async () => {
-  // pastikan room global ada
-  await ensureRoomDoc('global', null);
-  server.listen(PORT, () => console.log(`✅ CHK EJS+Mongo running on http://localhost:${PORT}`));
+  await ensureRoomDoc('global');
+  server.listen(PORT, () => console.log(`✅ CHK EJS+Mongo+Cursor running on http://localhost:${PORT}`));
 }).catch((err) => {
   console.error('Mongo connection error:', err);
   process.exit(1);
