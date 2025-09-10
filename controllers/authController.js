@@ -6,6 +6,17 @@ const Session = require('../models/Session');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
 
+function parseCookies(raw = '') {
+  const out = {};
+  String(raw || '')
+    .split(';')
+    .forEach((p) => {
+      const i = p.indexOf('=');
+      if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+    });
+  return out;
+}
+
 function setSessionCookie(res, sid) {
   // cookie httpOnly + sameSite Lax
   res.cookie('sid', sid, {
@@ -99,9 +110,36 @@ exports.postLogin = async (req, res) => {
 
 exports.postLogout = async (req, res) => {
   try {
-    const sid = (req.headers.cookie || '').split(';').map(v=>v.trim()).find(v=>v.startsWith('sid='))?.slice(4);
-    if (sid) await Session.deleteOne({ sid });
-    res.clearCookie('sid');
-  } catch {}
-  return res.redirect('/login');
+    // ambil sid dari cookie (pakai req.cookies kalau ada, atau fallback header)
+    const sid =
+      (req.cookies && req.cookies.sid) ||
+      parseCookies(req.headers.cookie || '').sid ||
+      null;
+
+    if (sid) {
+      // hapus sesi di DB (token == sid)
+      await Session.deleteOne({ token: sid }).catch(() => {});
+    }
+
+    // bersihkan cookie login & room
+    const cookieOpts = {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    };
+    res.clearCookie('sid', cookieOpts);
+    res.clearCookie('rid', cookieOpts);
+
+    // opsional: kosongkan user di res.locals
+    if (res.locals) res.locals.user = null;
+
+    // arahkan balik ke halaman awal (atau /login kalau kamu mau)
+    return res.redirect(303, '/');
+  } catch (e) {
+    // fallback: tetap bersihkan cookie & redirect
+    res.clearCookie('sid', { path: '/' });
+    res.clearCookie('rid', { path: '/' });
+    return res.redirect(303, '/');
+  }
 };

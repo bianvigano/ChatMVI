@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>
+        <%= typeof title !=='undefined' ? title : 'Chat MVI' %>
+    </title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+
+<!-- data-username dipakai main.js -> detectUsername() -->
+
+<body data-username="<%= (user && (user.username || user.name)) || '' %>" data-room="">
+    <header class="app-header">
+        <div class="app-brand">
+            <h3>CHK Chat</h3>
+            <div id="roomTopic" class="muted"></div>
+            <div id="roomRules" class="muted small"></div>
+        </div>
+
+        <div class="app-actions">
+            <input id="searchInput" placeholder="Cari pesan..." />
+            <button id="searchBtn">Cari</button>
+
+            <% if (user) { %>
+                <span class="muted">Hi, <b>
+                        <%= user.username || user.name %>
+                    </b></span>
+                <form method="post" action="/logout" style="display:inline">
+                    <button type="submit" id="logoutBtn">Logout</button>
+                </form>
+                <!-- <button type="button" id="openRoomModal">Pilih Room</button> -->
+                <a class="btn" href="/">Menu</a>
+                <% } else { %>
+                    <a href="/login"><button type="button" id="openLoginBtn">Masuk</button></a>
+                    <a href="/register"><button type="button">Daftar</button></a>
+                    <% } %>
+        </div>
+    </header>
+
+    <!-- <section class="app-layout"> -->
+    <!-- Sidebar opsional; biarkan dikomentari jika belum dipakai -->
+    <!--
+    <aside class="sidebar">
+      <h4>Pin</h4>
+      <ul id="pinList" class="pin-list"></ul>
+
+      <h4>Pengumuman</h4>
+      <div id="announcements"></div>
+
+      <h4>Pengguna</h4>
+      <div id="onlineUsers">-</div>
+    </aside>
+    -->
+
+    <main class="chat-main">
+        <!-- Panel hasil pencarian -->
+        <div id="searchPanel" class="search-panel">
+            <div class="panel-head">
+                <b>Hasil Pencarian</b>
+                <button onclick="document.getElementById('searchPanel').style.display='none'">Tutup</button>
+            </div>
+            <div id="searchResults"></div>
+        </div>
+
+        <!-- Timeline -->
+        <div id="messages" class="messages"></div>
+        <div id="typingIndicator" class="typing small muted"></div>
+
+        <!-- Compose -->
+         <footer>
+            <form id="form" class="composer fixed-footer">
+                <div class="chatkirm">
+                    <input id="input" autocomplete="off" placeholder="Ketik pesan atau /command …" />
+                    <button type="submit">Kirim</button>
+                </div>
+            </form>
+         </footer>
+    </main>
+    <!-- </section> -->
+
+    <!-- Client Socket.IO (ESM) & main app -->
+    <!-- Kamu SUDAH mengimpor io() dari /socket.io/socket.io.esm.min.js di main.js -->
+    <script type="module" src="/js/main.js"></script>
+
+    <!-- (opsional) tombol tutup modal -->
+    <script>
+        // kecil saja: tutup modal saat klik luar
+        (function () {
+            const m = document.getElementById('loginModal');
+            const btnClose = document.getElementById('btnCloseModal');
+            btnClose?.addEventListener('click', () => m && (m.style.display = 'none'));
+            m?.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });
+        })();
+    </script>
+</body>
+
+</html>

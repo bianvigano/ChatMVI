@@ -13,6 +13,7 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const webpush = require('web-push');
 
+
 const { connectMongo } = require('./db');
 const Room = require('./models/Room');
 const Message = require('./models/Message');
@@ -44,7 +45,7 @@ require('./models/PasswordResetToken');
 require('./models/Room');
 require('./models/RoomMember');
 
-const { loadUser } = require('./middleware/auth');
+const { loadUser,requireAuth } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const passwordRoutes = require('./routes/password');
 const profileRoutes = require('./routes/profile');
@@ -200,6 +201,12 @@ app.get('/messages', async (req, res) => {
   }
 });
 
+//  ============================ chat 
+app.get('/chat', requireAuth, (req, res) => {
+  // halaman khusus chat, user sudah login
+  res.render('chat', { title: 'Chat', user: res.locals.user || req.user || null });
+});
+
 // ===== Search API =====
 app.get('/search', async (req, res) => {
   try {
@@ -308,6 +315,37 @@ function parseCookies(raw = '') {
   return out;
 }
 
+// io.use(async (socket, next) => {
+//   try {
+//     const cookiesRaw = parseCookies(socket.request.headers.cookie || '');
+//     console.log('[SOCKET] raw cookies:', cookiesRaw);
+
+//     const cookies = cookiesRaw.split(';').reduce((a, p) => {
+//       const i = p.indexOf('=');
+//       if (i > -1) a[p.slice(0,i).trim()] = decodeURIComponent(p.slice(i+1).trim());
+//       return a;
+//     }, {});
+
+//     const sid = cookies.sid;
+//     const rid = cookies.rid;           // room id pilihan user (global/private)
+
+//     if (sid) {
+//       const sess = await Session.findOne({ sid }).lean();
+//       if (sess) {
+//         const user = await User.findById(sess.userId).lean();
+//         if (user) {
+//           socket.data.user = user;
+//           socket.data.username = user.username;
+//         }
+//       }
+//     }
+
+    
+//     console.log('[SOCKET] middleware: sid =', sid ? '(ada)' : '(tidak ada)', ', rid =', rid || '(null)');
+//     socket.data.roomId = rid || 'global';
+//     next();
+//   } catch (e) { next(e); }
+// });
 
 io.use(async (socket, next) => {
   try {
