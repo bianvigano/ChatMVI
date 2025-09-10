@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anggota • <%= room.roomId %></title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .wrap{max-width:760px;margin:24px auto;background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:18px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+    .role{padding:2px 8px;border-radius:999px;border:1px solid var(--border)}
+    .btn{height:32px;border-radius:10px;background:var(--brand);color:#fff;border:1px solid var(--brand-700);padding:0 12px;cursor:pointer}
+    form{display:inline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Anggota Room: <code><%= room.roomId %></code></h2>
+    <table>
+      <thead><tr><th>Pengguna</th><th>Email</th><th>Role</th><th>Aksi</th></tr></thead>
+      <tbody>
+        <% members.forEach(m => { %>
+          <tr>
+            <td><%= m.userId?.name %> (@<%= m.userId?.username %>)</td>
+            <td><%= m.userId?.email %></td>
+            <td><span class="role"><%= m.role %></span></td>
+            <td>
+              <% if (String(room.ownerId) === String(me._id)) { %>
+                <% if (m.role === 'member') { %>
+                  <form method="post" action="/room/<%= room.roomId %>/promote">
+                    <input type="hidden" name="userId" value="<%= m.userId?._id %>" />
+                    <button class="btn" type="submit">Jadikan Mod</button>
+                  </form>
+                <% } else if (m.role === 'mod') { %>
+                  <form method="post" action="/room/<%= room.roomId %>/demote">
+                    <input type="hidden" name="userId" value="<%= m.userId?._id %>" />
+                    <button class="btn" type="submit">Turunkan</button>
+                  </form>
+                <% } %>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

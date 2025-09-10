@@ -33,24 +33,60 @@ const upload = multer({
 });
 
 // Optional push (konfigurasi VAPID via env)
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT) {
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
-}
+// if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT) {
+//   webpush.setVapidDetails(process.env.VAPID_SUBJECT, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+// }
+
+// Pastikan file model ter-load
+require('./models/User');
+require('./models/Session');
+require('./models/PasswordResetToken');
+require('./models/Room');
+require('./models/RoomMember');
+
+const { loadUser } = require('./middleware/auth');
+const authRoutes = require('./routes/auth');
+const passwordRoutes = require('./routes/password');
+const profileRoutes = require('./routes/profile');
+const roomMgmtRoutes = require('./routes/room');     // members/promote/demote
+let roomsHttpRoutes = null;                          // join/create/join via backend (opsional)
+try { roomsHttpRoutes = require('./routes/rooms'); } catch { /* optional */ }
 
 // ===== App setup =====
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(helmet());
+
+// Helmet duluan (CSP ketat: tanpa inline)
+app.use(helmet({
+  // contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : undefined
+  contentSecurityPolicy: false // matikan CSP dulu supaya gampang debugging
+}));
 app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Static
 app.use('/uploads', express.static(UPLOAD_DIR));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0 }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0
+}));
+
+// Logging
+// app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Rate limit dasar (HTTP)
 app.use('/upload', rateLimit({ windowMs: 60_000, limit: 60 }));
 app.use('/search', rateLimit({ windowMs: 30_000, limit: 30 }));
+
+// Load user (res.locals.user) sebelum routes
+app.use(loadUser);
+
+// Routes utama
+if (roomsHttpRoutes) app.use(roomsHttpRoutes); // POST /join/global, /room/create, /room/join
+app.use(authRoutes);        // /login /register
+app.use(passwordRoutes);
+app.use(profileRoutes);
+app.use(roomMgmtRoutes);    // /room/:roomId/members, promote/demote
 
 // ===== Presence in-memory =====
 const presences = new Map(); // roomId -> { users: Map(socketId->username), nameToSockets: Map(username->Set), lastMsgAtByUser: Map(username->ts), tokenBuckets: Map(username->{ts, count}) }
@@ -122,14 +158,21 @@ async function buildLinkPreview(text) {
 function canAct(room, actor, action) {
   if (!room) return false;
   if (actor === room.owner) return true;
-  if (['BAN','UNBAN','KICK','MOD','UNMOD','PIN','UNPIN','ANNOUNCE','THEME'].includes(action)) {
+  if (['BAN', 'UNBAN', 'KICK', 'MOD', 'UNMOD', 'PIN', 'UNPIN', 'ANNOUNCE', 'THEME'].includes(action)) {
     return room.mods?.includes(actor) || actor === room.owner;
   }
   return true;
 }
 
+const RoomMember = require('./models/RoomMember');
+async function canModerate(roomId, userId) {
+  const m = await RoomMember.findOne({ roomId, userId }).lean();
+  return !!m && (m.role === 'owner' || m.role === 'mod');
+}
+
 // ===== Views =====
 app.get('/', async (req, res) => {
+  // index.ejs sudah kondisional: landing jika !user, chat jika user
   res.render('index', { title: 'Chat MVI' });
 });
 
@@ -247,8 +290,61 @@ app.get('/invite/:token', async (req, res) => {
 //   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 // });
 
+// Silence Chrome DevTools probe
+app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.status(204).end(); // No Content
+});
+
+// ===== Socket.IO Handshake: inject user & room dari cookie =====
+const Session = require('./models/Session');
+const User = require('./models/User');
+function parseCookies(raw = '') {
+  const out = {};
+  raw.split(';').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+  });
+  return out;
+}
+
+
+io.use(async (socket, next) => {
+  try {
+    const cookies = parseCookies(socket.request.headers.cookie || '');
+    const sid = cookies.sid || null;           // session id (dibuat saat login)
+    const rid = cookies.rid || 'global';       // room id (diset via /join/global)
+
+    let user = null;
+    if (sid) {
+      // ambil session -> user
+      // Jika model kamu bernama lain, sesuaikan field-nya (token/userId)
+      const sess = await Session.findOne({ token: sid }).lean();
+      if (sess?.userId) {
+        user = await User.findById(sess.userId).lean();
+      }
+    }
+
+    socket.data.user     = user || null;
+    socket.data.username = user?.username || 'guest';
+    socket.data.roomId   = rid;
+
+    console.log('[SOCKET] handshake:',
+      'sid:', sid ? 'ada' : '-',
+      '| rid:', socket.data.roomId,
+      '| username:', socket.data.username
+    );
+
+    next();
+  } catch (err) {
+    console.error('[SOCKET] handshake error:', err);
+    next(err);
+  }
+});
+
 // ===== Socket.IO =====
 io.on('connection', (socket) => {
+  console.log('[SOCKET] connection: username =', socket.data?.username || '(guest)', 'roomId =', socket.data?.roomId);
   let current = { roomId: null, username: null };
 
   function socketRateLimit(roomId, username) {
@@ -302,6 +398,12 @@ io.on('connection', (socket) => {
     broadcastPresence(roomId);
   }
 
+  // === AUTO-JOIN berdasar cookie (tanpa JS inline) ===
+  const initialUsername = socket.data.username || 'guest';
+  const initialRoomId = socket.data.roomId || 'global';
+  joinRoom(initialRoomId, initialUsername);
+
+  // (Masih dipertahankan untuk kompatibilitas frontend lama)
   socket.on('joinGlobal', async ({ username }) => {
     if (!username) return;
     await ensureRoomDoc('global', null);
@@ -483,57 +585,64 @@ io.on('connection', (socket) => {
 
   socket.on('deleteMessage', async ({ id }, cb) => {
     try {
-      const { roomId, username } = current;
-      if (!roomId || !username) return cb?.({ ok: false });
-      const m = await Message.findOne({ _id: id, roomId });
-      if (!m) return cb?.({ ok: false, error: 'NOT_FOUND' });
-      if (m.username !== username && !(await Room.findOne({ roomId, $or: [{ owner: username }, { mods: username }] }))) {
-        return cb?.({ ok: false, error: 'FORBIDDEN' });
+      const msg = await Message.findById(id);
+      if (!msg) return cb?.({ ok: false, error: 'NOT_FOUND' });
+
+      const roomId = msg.roomId || 'global';
+      const isSelf = msg.username === socket.data.username;
+
+      if (!isSelf) {
+        const userId = socket.data.user?._id;
+        if (!userId || !(await canModerate(roomId, userId))) {
+          return cb?.({ ok: false, error: 'FORBIDDEN' });
+        }
       }
+
       await Message.deleteOne({ _id: id });
-      io.to(roomId).emit('messageDeleted', { id: String(id) });
-      await Audit.create({ type: 'DELETE', roomId, actor: username, meta: { id } });
+      io.to(roomId).emit('messageDeleted', { id });
       cb?.({ ok: true });
-    } catch { cb?.({ ok: false }); }
+    } catch (e) {
+      cb?.({ ok: false, error: 'ERR' });
+    }
   });
 
   // Reactions
   socket.on('reactMessage', async ({ id, emoji }, cb) => {
     try {
       const { roomId, username } = current;
-      if (!roomId || !username || !emoji) return cb?.({ ok:false });
+      if (!roomId || !username || !emoji) return cb?.({ ok: false });
       const m = await Message.findOne({ _id: id, roomId });
-      if (!m) return cb?.({ ok:false, error:'NOT_FOUND' });
+      if (!m) return cb?.({ ok: false, error: 'NOT_FOUND' });
       if (!m.reactions) m.reactions = new Map();
       const cur = new Set(m.reactions.get(emoji) || []);
       if (cur.has(username)) cur.delete(username); else cur.add(username);
       m.reactions.set(emoji, Array.from(cur));
       await m.save();
-      io.to(roomId).emit('messageEdited', { id:String(m._id), newText:m.text, editedAt:m.editedAt, linkPreview:m.linkPreview, reactions:Object.fromEntries(m.reactions), seenBy: m.seenBy });
-      cb?.({ ok:true });
-    } catch { cb?.({ ok:false }); }
+      io.to(roomId).emit('messageEdited', { id: String(m._id), newText: m.text, editedAt: m.editedAt, linkPreview: m.linkPreview, reactions: Object.fromEntries(m.reactions), seenBy: m.seenBy });
+      cb?.({ ok: true });
+    } catch { cb?.({ ok: false }); }
   });
 
   // Read receipts
   socket.on('seenUpTo', async ({ lastId }, cb) => {
     try {
       const { roomId, username } = current;
-      if (!roomId || !username || !lastId) return cb?.({ ok:false });
-      const pivot = await Message.findOne({ _id: lastId, roomId }, { createdAt:1, _id:1 }).lean();
-      if (!pivot) return cb?.({ ok:false });
+      if (!roomId || !username || !lastId) return cb?.({ ok: false });
+      const pivot = await Message.findOne({ _id: lastId, roomId }, { createdAt: 1, _id: 1 }).lean();
+      if (!pivot) return cb?.({ ok: false });
       await Message.updateMany(
         { roomId, $or: [{ createdAt: { $lt: pivot.createdAt } }, { createdAt: pivot.createdAt, _id: { $lte: pivot._id } }] },
         { $addToSet: { seenBy: username } }
       );
-      cb?.({ ok:true });
-    } catch { cb?.({ ok:false }); }
+      cb?.({ ok: true });
+    } catch { cb?.({ ok: false }); }
   });
 
   // Slash commands (roles/moderasi, pin, rules, topic, slow, theme, invite)
   socket.on('slash', async ({ cmd, args }, cb) => {
     try {
       const { roomId, username } = current;
-      if (!roomId || !username) return cb?.({ ok:false, error:'NOT_IN_ROOM' });
+      if (!roomId || !username) return cb?.({ ok: false, error: 'NOT_IN_ROOM' });
       const room = await Room.findOne({ roomId });
       const c = String(cmd || '').toLowerCase();
 
@@ -546,60 +655,60 @@ io.on('connection', (socket) => {
             const url = `https://api.giphy.com/v1/gifs/search?api_key=${KEY}&q=${encodeURIComponent(q)}&limit=1&rating=g`;
             const rGif = await (global.fetch || fetchFallback)(url).then(r => r.json());
             gifUrl = rGif?.data?.[0]?.images?.downsized_medium?.url || gifUrl;
-          } catch {}
+          } catch { }
         }
         const msgDoc = await Message.create({ roomId, username, type: 'image', imageUrl: gifUrl });
         io.to(roomId).emit('message', msgDoc.toObject());
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'topic') {
         const topic = String((args || []).join(' ')).slice(0, 500);
-        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         room.topic = topic; await room.save();
         io.to(roomId).emit('roomInfo', { topic: room.topic, rules: room.rules, slowModeSec: room.slowModeSec, theme: room.theme, pins: [], announcements: room.announcements });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'rules') {
         const rules = String((args || []).join(' ')).slice(0, 1000);
-        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         room.rules = rules; await room.save();
         io.to(roomId).emit('roomInfo', { topic: room.topic, rules: room.rules, slowModeSec: room.slowModeSec, theme: room.theme, pins: [], announcements: room.announcements });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'slow') {
-        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         const sec = Math.max(0, parseInt(args?.[0] || '0', 10) || 0);
         room.slowModeSec = sec; await room.save();
         io.to(roomId).emit('slowMode', { seconds: sec, waitMs: sec * 1000 });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'theme') {
-        if (!canAct(room, username, 'THEME')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'THEME')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         const mode = (args?.[0] || '').toLowerCase(); // 'dark'/'light'
         if (mode === 'dark' || mode === 'light') room.theme.mode = mode;
         const accent = args?.[1]; if (accent) room.theme.accent = accent;
         await room.save();
         io.to(roomId).emit('roomInfo', { topic: room.topic, rules: room.rules, slowModeSec: room.slowModeSec, theme: room.theme, pins: [], announcements: room.announcements });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'announce') {
-        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         const text = String((args || []).join(' ')).slice(0, 500);
         room.announcements.push({ text, createdAt: new Date() });
         await room.save();
         io.to(roomId).emit('roomInfo', { topic: room.topic, rules: room.rules, slowModeSec: room.slowModeSec, theme: room.theme, pins: [], announcements: room.announcements });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'pin' || c === 'unpin') {
-        if (!canAct(room, username, 'PIN')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'PIN')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         const id = args?.[0];
-        if (!id) return cb?.({ ok:false, error:'BAD_ARG' });
+        if (!id) return cb?.({ ok: false, error: 'BAD_ARG' });
         if (c === 'pin') {
           if (!room.pinnedMessageIds.includes(id)) room.pinnedMessageIds.push(id);
           await Audit.create({ type: 'PIN', roomId, actor: username, meta: { id } });
@@ -610,13 +719,13 @@ io.on('connection', (socket) => {
         await room.save();
         const pins = room.pinnedMessageIds.length ? await Message.find({ _id: { $in: room.pinnedMessageIds } }).lean() : [];
         io.to(roomId).emit('roomInfo', { topic: room.topic, rules: room.rules, slowModeSec: room.slowModeSec, theme: room.theme, pins, announcements: room.announcements });
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'ban' || c === 'unban' || c === 'kick') {
-        if (!canAct(room, username, 'BAN')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'BAN')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         const target = (args?.[0] || '').trim();
-        if (!target) return cb?.({ ok:false, error:'BAD_ARG' });
+        if (!target) return cb?.({ ok: false, error: 'BAD_ARG' });
         if (c === 'ban') {
           if (!room.bannedUsers.includes(target)) room.bannedUsers.push(target);
           await room.save();
@@ -632,13 +741,13 @@ io.on('connection', (socket) => {
           p.nameToSockets.get(target)?.forEach(sid => io.sockets.sockets.get(sid)?.leave(roomId));
           await Audit.create({ type: 'KICK', roomId, actor: username, target });
         }
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'mod' || c === 'unmod') {
-        if (username !== room.owner) return cb?.({ ok:false, error:'OWNER_ONLY' });
+        if (username !== room.owner) return cb?.({ ok: false, error: 'OWNER_ONLY' });
         const target = (args?.[0] || '').trim();
-        if (!target) return cb?.({ ok:false, error:'BAD_ARG' });
+        if (!target) return cb?.({ ok: false, error: 'BAD_ARG' });
         if (c === 'mod') {
           if (!room.mods.includes(target)) room.mods.push(target);
           await room.save(); await Audit.create({ type: 'MOD', roomId, actor: username, target });
@@ -646,7 +755,7 @@ io.on('connection', (socket) => {
           room.mods = room.mods.filter(u => u !== target);
           await room.save(); await Audit.create({ type: 'UNMOD', roomId, actor: username, target });
         }
-        return cb?.({ ok:true });
+        return cb?.({ ok: true });
       }
 
       if (c === 'invite') {
@@ -654,23 +763,23 @@ io.on('connection', (socket) => {
         const token = crypto.randomBytes(16).toString('hex');
         const expiresAt = new Date(Date.now() + 3600 * 1000);
         await InviteToken.create({ roomId, token, singleUse, expiresAt });
-        return cb?.({ ok:true, token, url: `/invite/${token}` });
+        return cb?.({ ok: true, token, url: `/invite/${token}` });
       }
 
       if (c === 'export') {
         // hanya owner/mod
-        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok:false, error:'FORBIDDEN' });
+        if (!canAct(room, username, 'ANNOUNCE')) return cb?.({ ok: false, error: 'FORBIDDEN' });
         await Audit.create({ type: 'EXPORT', roomId, actor: username, meta: { via: 'slash' } });
-        return cb?.({ ok:true, url: `/export?room=${encodeURIComponent(roomId)}&format=json` });
+        return cb?.({ ok: true, url: `/export?room=${encodeURIComponent(roomId)}&format=json` });
       }
 
       // /tr <lang> <teks>  (opsional jika LIBRETRANSLATE_URL tersedia)
       if (c === 'tr') {
         const LT = process.env.LIBRETRANSLATE_URL;
-        if (!LT) return cb?.({ ok:false, error:'NO_TRANSLATE' });
+        if (!LT) return cb?.({ ok: false, error: 'NO_TRANSLATE' });
         const lang = (args?.[0] || 'en').toLowerCase();
         const text = String(args?.slice(1).join(' ') || '').trim();
-        if (!text) return cb?.({ ok:false, error:'BAD_ARG' });
+        if (!text) return cb?.({ ok: false, error: 'BAD_ARG' });
         try {
           const res = await (global.fetch || fetchFallback)(`${LT}/translate`, {
             method: 'POST',
@@ -679,23 +788,23 @@ io.on('connection', (socket) => {
           }).then(r => r.json());
           const msgDoc = await Message.create({ roomId, username, type: 'text', text: `**Terjemahan (${lang})**: ${res?.translatedText || '(gagal)'}` });
           io.to(roomId).emit('message', msgDoc.toObject());
-          return cb?.({ ok:true });
-        } catch { return cb?.({ ok:false }); }
+          return cb?.({ ok: true });
+        } catch { return cb?.({ ok: false }); }
       }
 
-      return cb?.({ ok:false, error:'UNKNOWN' });
-    } catch { cb?.({ ok:false, error:'ERR' }); }
+      return cb?.({ ok: false, error: 'UNKNOWN' });
+    } catch { cb?.({ ok: false, error: 'ERR' }); }
   });
 
   // Kirim file dari client setelah /upload
   socket.on('sendFile', async ({ file }, cb) => {
     try {
       const { roomId, username } = current;
-      if (!roomId || !username || !file?.url) return cb?.({ ok:false });
+      if (!roomId || !username || !file?.url) return cb?.({ ok: false });
       const msgDoc = await Message.create({ roomId, username, type: 'file', file });
       io.to(roomId).emit('message', msgDoc.toObject());
-      cb?.({ ok:true });
-    } catch { cb?.({ ok:false }); }
+      cb?.({ ok: true });
+    } catch { cb?.({ ok: false }); }
   });
 
   // Disconnect

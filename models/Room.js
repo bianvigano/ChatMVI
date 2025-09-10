@@ -12,16 +12,13 @@ const ThemeSchema = new mongoose.Schema({
 }, { _id: false });
 
 const RoomSchema = new mongoose.Schema({
-  roomId: { type: String, unique: true, index: true, required: true },
+  roomId: { type: String, unique: true, index: true, required: true }, // "global" atau nama privat
+
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
 
   // Auth
   password: { type: String, default: null, select: false }, // legacy (akan auto-migrate)
   passwordHash: { type: String, default: null },
-
-  // Roles & moderation
-  owner: { type: String, default: null },       // username pembuat room
-  mods: { type: [String], default: [] },        // moderator
-  bannedUsers: { type: [String], default: [] }, // daftar yang diblokir
 
   // Info
   topic: { type: String, default: '' },

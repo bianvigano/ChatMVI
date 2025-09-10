@@ -1,6 +1,6 @@
 // public/sw.js - PWA cache dasar
-const CACHE = 'chk-cache-v1';
-const CORE = ['/', '/manifest.json', '/style.css'];
+// const CACHE = 'chk-cache-v1';
+// const CORE = ['/', '/manifest.json', '/style.css'];
 
 // self.addEventListener('install', (e) => {
 //   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(()=>self.skipWaiting()));

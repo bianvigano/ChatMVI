@@ -6,6 +6,7 @@
   <title><%= typeof title !== 'undefined' ? title : 'Chat MVI' %></title>
   <link rel="stylesheet" href="/style.css" />
 </head>
+
 <body>
   <header class="app-header">
     <div class="app-brand">
@@ -16,9 +17,17 @@
     <div class="app-actions">
       <input id="searchInput" placeholder="Cari pesan..." />
       <button id="searchBtn">Cari</button>
-      <span class="muted">Online: <b id="onlineCount">0</b></span>
-      <button id="openLoginBtn" title="Masuk">Masuk</button>
-      <button id="logoutBtn">Logout</button>
+
+      <% if (user) { %>
+        <span class="muted">Hi, <b><%= user.username %></b></span>
+        <form method="post" action="/logout" style="display:inline">
+          <button type="submit" id="logoutBtn">Logout</button>
+        </form>
+        <button type="button" id="openRoomModal">Pilih Room</button>
+      <% } else { %>
+        <a href="/login"><button type="button" id="openLoginBtn">Masuk</button></a>
+        <a href="/register"><button type="button">Daftar</button></a>
+      <% } %>
     </div>
   </header>
 
@@ -48,11 +57,10 @@
       <div id="messages" class="messages"></div>
       <div id="typingIndicator" class="typing small muted"></div>
 
-      <!-- Reply bar (diisi via JS) -->
-      <div id="replyBar" style="display:none"></div>
+      <!-- Reply bar akan dibuat otomatis oleh JS tepat di atas form -->
 
       <!-- Toolbar -->
-      <div class="toolbar">
+      <!-- <div class="toolbar">
         <button id="mdBoldBtn">B</button>
         <button id="mdItalicBtn"><i>I</i></button>
         <button id="mdCodeBtn">`</button>
@@ -61,7 +69,7 @@
         <button id="previewToggle">Preview</button>
         <button id="fileBtn">📎</button>
         <input id="fileInput" type="file" style="display:none" />
-      </div>
+      </div> -->
 
       <!-- Preview -->
       <div id="mdPreview" class="preview" style="display:none"></div>
@@ -74,38 +82,34 @@
     </main>
   </section>
 
-  <!-- Login Modal -->
-  <div id="loginModal" class="modal">
+  <!-- Modal room (opsional). Boleh tanpa tab Global. -->
+  <div id="loginModal" class="modal" style="display:none">
     <div class="modal-card">
       <div class="tabs">
-        <button id="btnTabGlobal" class="tab active">Global</button>
-        <button id="btnTabPrivate" >Private</button>
-        <button id="btnTabPrivate" >Join server</button>
+        <!-- tombol ini opsional, JS pakai optional chaining -->
+        <button id="btnTabGlobal" class="tab">Global</button>
+        <button id="btnTabPrivate" class="tab active">Private</button>
       </div>
 
-      <div id="globalPanel">
-        <label>Username</label>
-        <input id="usernameGlobalInput" placeholder="nama kamu" />
-        <button id="loginGlobalBtn" class="full">Masuk Global</button>
+      <div id="globalPanel" style="display:none">
+        <!-- boleh dikosongkan / dihilangkan -->
       </div>
 
-      <div id="privatePanel" style="display:none;">
-        <label>Username</label>
-        <input id="usernamePrivateInput" placeholder="nama kamu" />
-        <label>Room</label>
-        <input id="roomInput" placeholder="contoh: tim-a" />
-        <label>Password (atau pakai token undangan)</label>
-        <input id="passwordInput" type="password" placeholder="••••••" />
-        <label>Token undangan (opsional)</label>
-        <input id="inviteTokenInput" placeholder="token" />
-        <div class="row">
-          <button id="createPrivateBtn">Buat Room</button>
-          <button id="loginPrivateBtn">Masuk Room</button>
-        </div>
+      <div id="privatePanel">
+        <form method="post" action="/room/join">
+          <label>Room</label>
+          <input name="roomId" placeholder="contoh: tim-a" />
+          <label>Password</label>
+          <input name="password" type="password" placeholder="••••••" />
+          <div class="row" style="margin-top:8px">
+            <button type="submit">Masuk Room</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
 
+  <!-- JS module saja, tanpa inline script -->
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

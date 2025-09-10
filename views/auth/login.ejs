@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Masuk • CHK</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .auth-wrap{max-width:420px;margin:40px auto;background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:18px}
+    .auth-wrap h2{margin:0 0 10px}
+    .f{margin-bottom:10px}
+    .f label{display:block;margin-bottom:4px}
+    .f input{width:100%;height:42px;border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    .err{color:#b91c1c;font-size:12px;margin-top:4px}
+    .btn{height:42px;border-radius:10px;background:var(--brand);color:#fff;border:1px solid var(--brand-700);padding:0 14px;cursor:pointer}
+    .note{font-size:12px;color:var(--muted);margin-bottom:8px}
+    .topbar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--brand);color:#fff}
+    .topbar a{color:#fff;text-decoration:underline}
+    .ok{background:#dcfce7;color:#166534;border:1px solid #86efac;padding:8px 10px;border-radius:8px;margin-bottom:10px}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div><b>CHK</b></div>
+    <div class="muted">•</div>
+    <div>Login</div>
+    <div style="margin-left:auto"><a href="/register">Buat akun</a></div>
+  </div>
+  <div class="auth-wrap">
+    <h2>Masuk</h2>
+    <% if (registered) { %><div class="ok">Registrasi berhasil. Silakan masuk.</div><% } %>
+    <form method="post" action="/login">
+      <div class="f">
+        <label>Username atau Email</label>
+        <input name="login" value="<%= values.login || '' %>" />
+        <% if (errors.login) { %><div class="err"><%= errors.login %></div><% } %>
+      </div>
+      <div class="f">
+        <label>Password</label>
+        <input name="password" type="password" />
+        <% if (errors.password) { %><div class="err"><%= errors.password %></div><% } %>
+      </div>
+      <div class="note">Tips: kamu bisa pakai <i>username</i> atau <i>email</i> untuk login.</div>
+      <button class="btn" type="submit">Masuk</button>
+    </form>
+    <div class="note"><a href="/forgot">Lupa password?</a></div>
+  </div>
+</body>
+</html>
